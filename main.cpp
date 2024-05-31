@@ -141,48 +141,42 @@ public:
 		}
 	}
 
-	char* load_file() // BIG PROBLEM 
-	{
-		char file_name[32];
-		char buffer[256];
-		const char* p_b = (char*)&buffer;
-		int rows = 0;
-		cout << "Enter the file name for loading: ";
-		cin >> file_name;
-		ifstream file(file_name);
-		if (file.fail()) {
-			printf("Error opening file\n");
-			return NULL;
-		}
-		while (file.getline(buffer, 256)) {
-			if (strlen(text[rows]) + strlen(buffer) >= array_cols) {
-				int new_cols = array_cols + 128;
-				text = reallocate_cols(&new_cols, text);
-			}
-			strncat_s(text[rows], array_cols, buffer, _TRUNCATE);
-
-			if (!file.eof() && (file.peek() == '\n' || file.peek() == '\r')) {
-				if (strlen(text[rows]) + 1 >= array_cols) {
-					int new_cols = array_cols + 128;
-					text = reallocate_cols(&new_cols, text);
-				}
-				strncat_s(text[rows], array_cols, "\n", _TRUNCATE);
-				file.get();
-			}
-
-			if (strchr(text[rows], '\n') != NULL) {
-				if (total_rows + 1 >= array_rows) {
-					int new_rows = array_rows + 10;
-					text = reallocate_rows(&new_rows, text);
-				}
-				text[rows + 1] = start_newline(text[rows] + strlen(text[rows]));
-				text[rows][strlen(text[rows]) - 1] = '\0';
-				rows++;
-			}
-		}
-		file.close();
-		return text[rows] + strlen(text[rows]);
-	}
+    char* load_file()
+    {
+        char file_name[32];
+        char ch;
+        int rows = 0;
+		char* last_char = text[0];
+        cout << "Enter the file name for loading: ";
+        cin >> file_name;
+        ifstream file(file_name);
+        if (!file.is_open()) {
+            cerr << "Error opening file" << endl;
+            return NULL;
+        }
+        while (file.get(ch)) {
+            if (strlen(text[rows]) + 1 >= array_cols) {
+                int new_cols = array_cols + 128;
+                text = reallocate_cols(&new_cols, text);
+            }
+            if (ch != '\n') {
+				*last_char = ch;
+				*last_char++;
+				*last_char = '\0';
+            }
+			else if (ch == '\n') {
+                if (total_rows + 1 >= array_rows) {
+                    int new_rows = array_rows + 10;
+                    text = reallocate_rows(&new_rows, text);
+                }
+                text[rows + 1] = start_newline(text[rows] + strlen(text[rows]));
+                rows++;
+				last_char = text[rows];
+            }
+        }
+        file.close();
+        return text[rows] + strlen(text[rows]);
+    }
 
 	void print_text() {
 		for (int i = 0; i <= total_rows; i++) {
