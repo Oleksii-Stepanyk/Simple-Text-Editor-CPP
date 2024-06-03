@@ -32,6 +32,7 @@ class TextEditor {
 private:
 	char** text;
 	int array_rows = 10, array_cols = 128, total_rows = 0;
+	char* paste_buffer = (char*)malloc(256 * sizeof(char));
 
 	char** allocate_array() {
 		char** array = (char**)malloc(array_rows * sizeof(char*));
@@ -119,20 +120,21 @@ public:
 			<< "12: Copy text" << endl
 			<< "13: Paste text" << endl
 			<< "14: Insert text with replacement" << endl
-			<< "15: Command list" << endl
-			<< "16: Move cursor" << endl
-			<< "17: Clear console" << endl
+			<< "15: Move cursor" << endl
+			<< "16: Clear console" << endl
+			<< "17: Command list" << endl
 			<< "0: Exit program" << endl;
 	}
 
 	void append_text(Cursor* cursor) {
 		char buffer[256];
+		cursor->_system_move_cursor(total_rows, (int)strlen(text[total_rows]));
 		char* position = cursor->get_position(text);
 		cout << "Enter text to append: " << endl;
 		cin.ignore();
 		cin.getline(buffer, 256);
 		buffer[cin.gcount()] = '\0';
-		if (strlen(position) + strlen(buffer) >= array_cols) {
+		if (strlen(text[total_rows]) + strlen(buffer) >= array_cols) {
 			int new_cols = array_cols + 128;
 			text = reallocate_cols(&new_cols, text);
 			position = cursor->get_position(text);
@@ -210,6 +212,7 @@ public:
 			}
 		}
 		file.close();
+		cout << "Text loaded successfully" << endl;
 		cursor->_system_move_cursor(rows, strlen(text[rows]));
 	}
 
@@ -220,28 +223,11 @@ public:
 		cout << endl;
 	}
 
-	void deallocate_array() {
-		for (int i = 0; i <= array_rows; i++) {
-			free(text[i]);
-		}
-		free(text);
-	}
-
 	void insert_text(Cursor* cursor) {
-		int row, col;
+		int row = cursor->row;
+		int col = cursor->col;
 		char entered_text[64];
-		cout << "Enter the row and column to insert text: ";
-		cin >> row >> col;
-		if (row > array_rows) {
-			int new_rows = array_rows + 10;
-			text = reallocate_rows(&new_rows, text);
-		}
 		char** position = text;
-		if (row > total_rows) {
-			for (int i = total_rows + 1; i <= row; i++) {
-				start_newline(cursor);
-			}
-		}
 		cout << "Enter text to insert: ";
 		cin.ignore();
 		cin.getline(entered_text, 256);
@@ -278,12 +264,82 @@ public:
 		}
 	}
 
+	void delete_text(Cursor* cursor) {
+		int row = cursor->row;
+		int col = cursor->col;
+		int length;
+		cout << "Enter the length of text to delete: ";
+		cin >> length;
+		if (col + length >= array_cols - 1) {
+			cerr << "The length is out of range" << endl;
+			return;
+		}
+		for (int i = col; i <= strlen(text[row]) - length; i++) {
+			text[row][i] = text[row][i + length];
+		}
+	}
+
+	void undo_command() {
+		return;
+	}
+	void redo_command() {
+		return;
+	}
+	void cut_text(Cursor* cursor) {
+		int row = cursor->row;
+		int col = cursor->col;
+		int length;
+		cout << "Enter the length of text to cut: ";
+		cin >> length;
+		if (col + length >= array_cols - 1) {
+			cerr << "The length is out of range" << endl;
+			return;
+		}
+		for (int i = col; i < col + length; i++) {
+			paste_buffer[i - col] = text[row][i];
+		}
+		paste_buffer[length] = '\0';
+
+		for (int i = col; i <= strlen(text[row]) - length; i++) {
+			text[row][i] = text[row][i + length];
+		}
+	}
+	void copy_text(Cursor* cursor) {
+		int row = cursor->row;
+		int col = cursor->col;
+		int length;
+		cout << "Enter the length of text to copy: ";
+		cin >> length;
+		if (col + length >= array_cols - 1) {
+			cerr << "The length is out of range" << endl;
+			return;
+		}
+		for (int i = col; i < col + length; i++) {
+			paste_buffer[i - col] = text[row][i];
+		}
+		paste_buffer[length] = '\0';
+	}
+
+	void paste_text() {
+		return;
+	}
+	void insert_and_replace() {
+		return;
+	}
+
+	void deallocate_array() {
+		for (int i = 0; i <= array_rows; i++) {
+			free(text[i]);
+		}
+		free(text);
+	}
+
 	void clear_console() {
-#ifdef _WIN64
+	#ifdef _WIN64
 		system("cls");
-#else
+	#else
 		system("clear");
-#endif
+	#endif
 	}
 };
 
@@ -310,7 +366,7 @@ int main() {
 	Cursor* cursor = new Cursor();
 	while (true) {
 		int input;
-		cout << "Choose the command or enter 15 for commands list:" << endl;
+		cout << "Choose the command or enter 17 for commands list:" << endl;
 		cin >> input;
 		switch (input) {
 		case 1:
@@ -334,17 +390,40 @@ int main() {
 		case 7:
 			editor->search_text();
 			break;
-		case 15:
-			editor->print_help();
+		case 8:
+			editor->delete_text(cursor);
 			break;
-		case 16:
+		case 9:
+			editor->undo_command();
+			break;
+		case 10:
+			editor->redo_command();
+			break;
+		case 11:
+			editor->cut_text(cursor);
+			break;
+		case 12:
+			editor->copy_text(cursor);
+			break;
+		case 13:
+			editor->paste_text();
+			break;
+		case 14:
+			editor->insert_and_replace();
+			break;
+		case 15:
 			cursor->move_cursor(editor);
 			break;
-		case 17:
+		case 16:
 			editor->clear_console();
+			break;
+		case 17:
+			editor->print_help();
 			break;
 		case 0:
 			editor->deallocate_array();
+			delete editor;
+			delete cursor;
 			return 0;
 		default:
 			cout << "The command is not implemented" << endl;
