@@ -2,7 +2,31 @@
 #include <string>
 #include <cstring>
 #include <fstream>
+#include <cstdlib>
 using namespace std;
+
+class TextEditor;
+
+class Cursor {
+public:
+	int row, col;
+
+	Cursor() {
+		row = 0;
+		col = 0;
+	}
+
+	void _system_move_cursor(int new_row, int new_col) {
+		row = new_row;
+		col = new_col;
+	}
+
+	void move_cursor(TextEditor* editor);
+
+	char* get_position(char** text) {
+		return text[row] + col;
+	}
+};
 
 class TextEditor {
 private:
@@ -75,6 +99,10 @@ public:
 		return text;
 	}
 
+	int get_rows() {
+		return total_rows;
+	}
+
 	void print_help() {
 		cout << "Commands: " << endl
 			<< "1: Append text symbols to the end" << endl
@@ -91,40 +119,42 @@ public:
 			<< "12: Copy text" << endl
 			<< "13: Paste text" << endl
 			<< "14: Insert text with replacement" << endl
-			<< "15: Clear console" << endl
+			<< "15: Command list" << endl
+			<< "16: Move cursor" << endl
+			<< "17: Clear console" << endl
 			<< "0: Exit program" << endl;
 	}
 
-	char* append_text(char* last_char) {
+	void append_text(Cursor* cursor) {
 		char buffer[256];
+		char* position = cursor->get_position(text);
 		cout << "Enter text to append: " << endl;
 		cin.ignore();
 		cin.getline(buffer, 256);
 		buffer[cin.gcount()] = '\0';
-		int a = (int)strlen(buffer);
-		if (strlen(text[total_rows]) + strlen(buffer) >= array_cols) {
+		if (strlen(position) + strlen(buffer) >= array_cols) {
 			int new_cols = array_cols + 128;
 			text = reallocate_cols(&new_cols, text);
-			last_char = strstr(text[total_rows], "\0");
-			strcat_s(last_char, strlen(buffer), (const char*)&buffer);
+			position = cursor->get_position(text);
+			position = strstr(position, "\0");
 		}
-		else {
-			strcat_s(last_char, strlen(buffer) + 1, (const char*)&buffer);
-		}
-		return last_char + strlen(buffer);
+		strncat_s(position, (int)strlen(buffer) + 1, (const char*)&buffer, _TRUNCATE);
+		int total_cols = (int)strlen(text[total_rows]);
+		cursor->_system_move_cursor(cursor->row, total_cols);
 	}
 
-	char* start_newline(char* last_char) {
-		*last_char = '\n';
-		last_char++;
-		*last_char = '\0';
-		if (total_rows + 1 >= array_rows) {
+	void start_newline(Cursor* cursor) {
+		char* position = cursor->get_position(text);
+		*position = '\n';
+		position++;
+		*position = '\0';
+		if (cursor->row + 1 >= array_rows) {
 			int new_rows = array_rows + 10;
 			text = reallocate_rows(&new_rows, text);
 		}
 		total_rows++;
-		*text[total_rows] = '\0';
-		return text[total_rows];
+		cursor->_system_move_cursor(cursor->row + 1, 0);
+		*cursor->get_position(text) = '\0';
 	}
 
 	void save_file() {
@@ -141,42 +171,47 @@ public:
 		}
 	}
 
-    char* load_file()
-    {
-        char file_name[32];
-        char ch;
-        int rows = 0;
-		char* last_char = text[0];
-        cout << "Enter the file name for loading: ";
-        cin >> file_name;
-        ifstream file(file_name);
-        if (!file.is_open()) {
-            cerr << "Error opening file" << endl;
-            return NULL;
-        }
-        while (file.get(ch)) {
-            if (strlen(text[rows]) + 1 >= array_cols) {
-                int new_cols = array_cols + 128;
-                text = reallocate_cols(&new_cols, text);
-            }
-            if (ch != '\n') {
-				*last_char = ch;
-				*last_char++;
-				*last_char = '\0';
-            }
+	void load_file(Cursor* cursor)
+	{
+		char file_name[32];
+		char ch;
+		int rows = 0;
+		cursor->_system_move_cursor(0, 0);
+		char* position = cursor->get_position(text);
+		cout << "Enter the file name for loading: ";
+		cin >> file_name;
+		ifstream file(file_name);
+		if (!file.is_open()) {
+			cerr << "Error opening file" << endl;
+			return;
+		}
+		while (file.get(ch)) {
+			if (strlen(text[rows]) + 1 >= array_cols) {
+				int new_cols = array_cols + 128;
+				text = reallocate_cols(&new_cols, text);
+				position = cursor->get_position(text);
+			}
+			if (ch != '\n') {
+				*position = ch;
+				position++;
+				*position = '\0';
+				cursor->_system_move_cursor(rows, cursor->col + 1);
+			}
 			else if (ch == '\n') {
-                if (total_rows + 1 >= array_rows) {
-                    int new_rows = array_rows + 10;
-                    text = reallocate_rows(&new_rows, text);
-                }
-                text[rows + 1] = start_newline(text[rows] + strlen(text[rows]));
-                rows++;
-				last_char = text[rows];
-            }
-        }
-        file.close();
-        return text[rows] + strlen(text[rows]);
-    }
+				if (total_rows + 1 >= array_rows) {
+					int new_rows = array_rows + 10;
+					text = reallocate_rows(&new_rows, text);
+					position = cursor->get_position(text);
+				}
+				cursor->_system_move_cursor(rows, cursor->col + 1);
+				start_newline(cursor);
+				rows++;
+				position = cursor->get_position(text);
+			}
+		}
+		file.close();
+		cursor->_system_move_cursor(rows, strlen(text[rows]));
+	}
 
 	void print_text() {
 		for (int i = 0; i <= total_rows; i++) {
@@ -192,7 +227,7 @@ public:
 		free(text);
 	}
 
-	void insert_text() {
+	void insert_text(Cursor* cursor) {
 		int row, col;
 		char entered_text[64];
 		cout << "Enter the row and column to insert text: ";
@@ -204,7 +239,7 @@ public:
 		char** position = text;
 		if (row > total_rows) {
 			for (int i = total_rows + 1; i <= row; i++) {
-				position[i] = start_newline(text[total_rows] + strlen(text[total_rows]));
+				start_newline(cursor);
 			}
 		}
 		cout << "Enter text to insert: ";
@@ -252,41 +287,61 @@ public:
 	}
 };
 
+void Cursor::move_cursor(TextEditor* editor) {
+	int new_row, new_col;
+	int total_rows = editor->get_rows();
+	char** text = editor->get_text();
+	cout << "Enter the row and column to move cursor: ";
+	cin >> new_row >> new_col;
+	if (new_row > total_rows) {
+		cout << "Row is out of range" << endl;
+		return;
+	}
+	if (new_col > strlen(text[new_row])) {
+		cout << "Column is out of range" << endl;
+		return;
+	}
+	Cursor::row = new_row;
+	Cursor::col = new_col;
+}
+
 int main() {
 	TextEditor* editor = new TextEditor();
-	char* last_char = *editor->get_text();
-	*last_char = '\0';
+	Cursor* cursor = new Cursor();
 	while (true) {
 		int input;
-		cout << "Choose the command or enter 9 for commands list:" << endl;
+		cout << "Choose the command or enter 15 for commands list:" << endl;
 		cin >> input;
 		switch (input) {
 		case 1:
-			last_char = editor->append_text(last_char);
+			editor->append_text(cursor);
 			break;
 		case 2:
-			last_char = editor->start_newline(last_char);
+			editor->start_newline(cursor);
 			break;
 		case 3:
 			editor->save_file();
 			break;
 		case 4:
-			last_char = editor->load_file();
+			editor->load_file(cursor);
 			break;
 		case 5:
 			editor->print_text();
 			break;
 		case 6:
-			editor->insert_text();
+			editor->insert_text(cursor);
 			break;
 		case 7:
 			editor->search_text();
 			break;
-		case 8:
-			editor->clear_console();
-			break;
-		case 9:
+		case 15:
 			editor->print_help();
+			break;
+		case 16:
+			cursor->move_cursor(editor);
+			break;
+		case 17:
+			editor->clear_console();
 			break;
 		case 0:
 			editor->deallocate_array();
