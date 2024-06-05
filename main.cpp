@@ -28,11 +28,36 @@ public:
 	}
 };
 
+class Text_Buffer {
+public:
+    char** text;
+    int array_rows, array_cols, total_rows;
+    int cursor_row, cursor_col;
+	char* paste_buffer;
+
+    Text_Buffer(char** source, int arr_cols, int arr_rows, int tot_rows, int cursor_r, int cursor_c, char* pasted_buffer) 
+        : array_cols(arr_cols), array_rows(arr_rows), total_rows(tot_rows), cursor_row(cursor_r), cursor_col(cursor_c) {
+        text = new char*[array_rows];
+        paste_buffer = new char[256];
+        for (int i = 0; i < array_rows; i++) {
+            text[i] = new char[array_cols];
+            strcpy_s(text[i], array_cols, source[i]);
+        }
+        strcpy_s(paste_buffer, 256, pasted_buffer);
+    }
+};
+
 class TextEditor {
 private:
 	char** text;
 	int array_rows = 10, array_cols = 128, total_rows = 0;
 	char* paste_buffer = new char[256];
+	Text_Buffer* undo1;
+	Text_Buffer* undo2;
+	Text_Buffer* undo3;
+	Text_Buffer* redo1;
+	Text_Buffer* redo2;
+	Text_Buffer* redo3;
 
 	char** allocate_array() {
 		char** array = (char**)malloc(array_rows * sizeof(char*));
@@ -128,13 +153,19 @@ public:
 	}
 
 	void append_text(Cursor* cursor) {
+		undo2 = undo3;
+		undo1 = undo2;
+		undo3 = new Text_Buffer(text, array_cols, array_rows, total_rows, cursor->row, cursor->col, paste_buffer);
+
 		char buffer[256];
 		cursor->_system_move_cursor(total_rows, (int)strlen(text[total_rows]));
 		char* position = cursor->get_position(text);
+
 		cout << "Enter text to append: " << endl;
 		cin.ignore();
 		cin.getline(buffer, 256);
 		buffer[cin.gcount()] = '\0';
+
 		if (strlen(text[total_rows]) + strlen(buffer) >= array_cols) {
 			int new_cols = array_cols + 128;
 			text = reallocate_cols(&new_cols, text);
@@ -147,6 +178,10 @@ public:
 	}
 
 	void start_newline(Cursor* cursor) {
+		undo2 = undo3;
+		undo1 = undo2;
+		undo3 = new Text_Buffer(text, array_cols, array_rows, total_rows, cursor->row, cursor->col, paste_buffer);
+
 		char* position = cursor->get_position(text);
 		*position = '\n';
 		position++;
@@ -225,6 +260,10 @@ public:
 	}
 
 	void insert_text(Cursor* cursor) {
+		undo2 = undo3;
+		undo1 = undo2;
+		undo3 = new Text_Buffer(text, array_cols, array_rows, total_rows, cursor->row, cursor->col, paste_buffer);
+
 		int row = cursor->row;
 		int col = cursor->col;
 		char entered_text[64];
@@ -264,6 +303,10 @@ public:
 	}
 
     void delete_text(Cursor* cursor) {
+		undo2 = undo3;
+		undo1 = undo2;
+		undo3 = new Text_Buffer(text, array_cols, array_rows, total_rows, cursor->row, cursor->col, paste_buffer);
+
         int row = cursor->row;
         int col = cursor->col;
         int length;
@@ -283,13 +326,99 @@ public:
         text[row][strlen(text[row]) - length] = '\0';
     }
 
-	void undo_command() {
-		return;
+	void undo_command(Cursor* cursor) {
+		if (undo3 != NULL) {
+			cursor->_system_move_cursor(undo3->cursor_row, undo3->cursor_col);
+			array_rows = undo3->array_rows;
+			array_cols = undo3->array_cols;
+			total_rows = undo3->total_rows;
+			for (int i = 0; i <= total_rows; i++)
+			{
+				text[i] = undo3->text[i];
+			}
+			redo1 = undo3;
+			undo3 = NULL;
+			return;
+		}
+		else if(undo2 != NULL) {
+			cursor->_system_move_cursor(undo2->cursor_row, undo2->cursor_col);
+			array_rows = undo2->array_rows;
+			array_cols = undo2->array_cols;
+			total_rows = undo2->total_rows;
+			for (int i = 0; i <= total_rows; i++)
+			{
+				text[i] = undo2->text[i];
+			}
+			redo2 = undo2;
+			undo2 = NULL;
+			return;
+		}
+		else if (undo1 != NULL) {
+			cursor->_system_move_cursor(undo1->cursor_row, undo1->cursor_col);
+			array_rows = undo1->array_rows;
+			array_cols = undo1->array_cols;
+			total_rows = undo1->total_rows;
+			for (int i = 0; i <= total_rows; i++)
+			{
+				text[i] = undo1->text[i];
+			}
+			redo3 = undo1;
+			undo1 = NULL;
+			return;
+		}
+		else {
+			cerr << "Nothing to undo" << endl;
+		}
 	}
-	void redo_command() {
-		return;
+	void redo_command(Cursor* cursor) {
+		if (redo3 != NULL) {
+			cursor->_system_move_cursor(redo3->cursor_row, redo3->cursor_col);
+			array_rows = redo3->array_rows;
+			array_cols = redo3->array_cols;
+			total_rows = redo3->total_rows;
+			for (int i = 0; i <= total_rows; i++)
+			{
+				text[i] = redo3->text[i];
+			}
+			undo1 = redo3;
+			redo3 = NULL;
+			return;
+		}
+		else if (redo2 != NULL) {
+			cursor->_system_move_cursor(redo2->cursor_row, redo2->cursor_col);
+			array_rows = redo2->array_rows;
+			array_cols = redo2->array_cols;
+			total_rows = redo2->total_rows;
+			for (int i = 0; i <= total_rows; i++)
+			{
+				text[i] = redo2->text[i];
+			}
+			undo2 = redo2;
+			redo2 = NULL;
+			return;
+		}
+		else if (redo1 != NULL) {
+			cursor->_system_move_cursor(redo1->cursor_row, redo1->cursor_col);
+			array_rows = redo1->array_rows;
+			array_cols = redo1->array_cols;
+			total_rows = redo1->total_rows;
+			for (int i = 0; i <= total_rows; i++)
+			{
+				text[i] = redo1->text[i];
+			}
+			undo3 = redo1;
+			redo1 = NULL;
+			return;
+		}
+		else {
+			cerr << "Nothing to redo" << endl;
+		}
 	}
 	void cut_text(Cursor* cursor) {
+		undo2 = undo3;
+		undo1 = undo2;
+		undo3 = new Text_Buffer(text, array_cols, array_rows, total_rows, cursor->row, cursor->col, paste_buffer);
+
 		int row = cursor->row;
 		int col = cursor->col;
 		int length;
@@ -309,6 +438,10 @@ public:
 		}
 	}
 	void copy_text(Cursor* cursor) {
+		undo2 = undo3;
+		undo1 = undo2;
+		undo3 = new Text_Buffer(text, array_cols, array_rows, total_rows, cursor->row, cursor->col, paste_buffer);
+
 		int row = cursor->row;
 		int col = cursor->col;
 		int length;
@@ -325,6 +458,10 @@ public:
 	}
 
 	void paste_text(Cursor* cursor) {
+		undo2 = undo3;
+		undo1 = undo2;
+		undo3 = new Text_Buffer(text, array_cols, array_rows, total_rows, cursor->row, cursor->col, paste_buffer);
+
 		if (paste_buffer[0] == '\0') {
 			cerr << "The buffer is empty" << endl;
 			return;
@@ -342,6 +479,10 @@ public:
 	}
 
 	void insert_and_replace(Cursor* cursor) {
+		undo2 = undo3;
+		undo1 = undo2;
+		undo3 = new Text_Buffer(text, array_cols, array_rows, total_rows, cursor->row, cursor->col, paste_buffer);
+
 		int row = cursor->row;
 		int col = cursor->col;
 		char entered_text[64];
@@ -427,10 +568,10 @@ int main() {
 			editor->delete_text(cursor);
 			break;
 		case 9:
-			editor->undo_command();
+			editor->undo_command(cursor);
 			break;
 		case 10:
-			editor->redo_command();
+			editor->redo_command(cursor);
 			break;
 		case 11:
 			editor->cut_text(cursor);
