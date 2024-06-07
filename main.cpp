@@ -130,7 +130,14 @@ private:
 		undo1 = new Text_Buffer(text, array_rows, array_cols, total_rows, cursor->row, cursor->col, paste_buffer);
 	}
 
-	void restore_buffer(Cursor* cursor, Text_Buffer*& buf_1, Text_Buffer*& buf_2) {
+	void add_redo(Cursor* cursor) {
+		if (redo3) delete redo3;
+		redo3 = redo2;
+		redo2 = redo1;
+		redo1 = new Text_Buffer(text, array_rows, array_cols, total_rows, cursor->row, cursor->col, paste_buffer);
+	}
+
+	void restore_buffer(Cursor* cursor, Text_Buffer*& buf_1) {
 		cursor->_system_move_cursor(buf_1->cursor_row, buf_1->cursor_col);
 		array_rows = buf_1->array_rows;
 		array_cols = buf_1->array_cols;
@@ -141,23 +148,19 @@ private:
 		}
 		strcpy_s(paste_buffer, 256, buf_1->paste_buffer);
 
-		if (buf_2) delete buf_2;
-		buf_2 = new Text_Buffer(buf_1->text, buf_1->array_rows, buf_1->array_cols, buf_1->total_rows, buf_1->cursor_row, buf_1->cursor_col, buf_1->paste_buffer);
 		delete buf_1;
 		buf_1 = nullptr;
 	}
 
-	int get_input(Cursor* cursor, string action) {
-		int row = cursor->row;
-		int col = cursor->col;
-		int length;
+	int get_input(Cursor* cursor, string action, int& row, int& col, int& length) {
+		row = cursor->row;
+		col = cursor->col;
 		cout << "Enter the length of text to " << action << " : ";
 		cin >> length;
 		if (col + length >= strlen(text[row])) {
 			cerr << "The length is out of range" << endl;
 			return -1;
 		}
-		return row, col, length;
 	}
 
 public:
@@ -351,7 +354,7 @@ public:
 
 	void delete_text(Cursor* cursor) {
 		int row = 0, col = 0, length = 0;
-		row, col, length = get_input(cursor, "delete");
+		get_input(cursor, "delete", row, col, length);
 		if (row == -1) return;
 		add_undo(cursor);
 		for (int i = col; i < strlen(text[row]) - length; i++) {
@@ -363,7 +366,7 @@ public:
 
 	void cut_text(Cursor* cursor) {
 		int row = 0, col = 0, length = 0;
-		row, col, length = get_input(cursor, "cut");
+		get_input(cursor, "cut", row, col, length);
 		if (row == -1) return;
 		add_undo(cursor);
 		for (int i = col; i < col + length; i++) {
@@ -371,7 +374,7 @@ public:
 		}
 		paste_buffer[length] = '\0';
 
-		for (int i = col; i < strlen(text[row]) - length; i++) {
+		for (int i = col; i <= strlen(text[row]) - length; i++) {
 			text[row][i] = text[row][i + length];
 		}
 		cout << "Text cut successfully" << endl;
@@ -379,7 +382,7 @@ public:
 
 	void copy_text(Cursor* cursor) {
 		int row = 0, col = 0, length = 0;
-		row, col, length = get_input(cursor, "copy");
+		get_input(cursor, "copy", row, col, length);
 		if (row == -1) return;
 		add_undo(cursor);
 		for (int i = col; i < col + length; i++) {
@@ -424,7 +427,8 @@ public:
 
 	void undo_command(Cursor* cursor) {
 		if (undo1) {
-			restore_buffer(cursor, undo1, redo2);
+			add_redo(cursor);
+			restore_buffer(cursor, undo1);
 			undo1 = undo2;
 			undo2 = undo3;
 			undo3 = nullptr;
@@ -436,13 +440,13 @@ public:
 
 	void redo_command(Cursor* cursor) {
 		if (redo1) {
-			restore_buffer(cursor, redo1, undo1);
+			restore_buffer(cursor, redo1);
 			redo1 = redo2;
 			redo2 = undo3;
 			redo3 = nullptr;
 		}
 		else {
-			cerr << "Nothing to undo" << endl;
+			cerr << "Nothing to redo" << endl;
 		}
 	}
 
