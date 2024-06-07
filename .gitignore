@@ -30,3 +30,6 @@
 *.exe
 *.out
 *.app
+/.vs
+/Simple-T.c0173b8e
+/x64
