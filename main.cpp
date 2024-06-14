@@ -442,7 +442,7 @@ public:
 		if (redo1) {
 			restore_buffer(cursor, redo1);
 			redo1 = redo2;
-			redo2 = undo3;
+			redo2 = redo3;
 			redo3 = nullptr;
 		}
 		else {
